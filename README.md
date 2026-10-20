@@ -5,10 +5,16 @@ au-dessus du champ de saisie. C'est le module Correction de [MyConfig](https://g
 repris seul et refait de zéro : nouvelles consignes, évaluées sur de vraies dictées, et une bande
 plus discrète.
 
+![Après « ✓ Corriger » : le bilan, Garder et Revenir, au-dessus du texte corrigé](docs/capture.png)
+
+![Avant : le nombre de mots, « ✎ Améliorer » et « ✓ Corriger » au-dessus du texte dicté](docs/bande.png)
+
 ## Fonctions
 
 - **La bande n'apparaît que si le champ a du texte** : le nombre de mots à gauche, puis
-  « ✎ Améliorer » et « ✓ Corriger ». Champ vide : rien ne s'affiche.
+  « ✎ Améliorer » et « ✓ Corriger ». Champ vide : rien ne s'affiche. Au terminal, elle suit chaque
+  frappe ; l'app de bureau ne transmet pas les frappes aux mods, et la bande y apparaît quelques
+  secondes après le début de la saisie.
 - **✎ Améliorer** réécrit ta demande, souvent dictée, en un prompt que Claude Code comprend du
   premier coup : l'oral nettoyé (hésitations, reprises), les faits, chiffres, contraintes et
   chemins gardés mot pour mot, rien d'inventé, une structure seulement quand elle aide.
@@ -16,8 +22,9 @@ plus discrète.
   reconnus par la dictée) et garde tes mots, ton ton et tes québécismes.
 - **Pendant le travail** : « Reformulation… · Sonnet » ou « Correction… · Opus », et **Annuler**.
 - **Après** : un bilan (« 6 corrections · 1,1 s », « Prompt amélioré · 19 → 18 mots · 1,8 s »),
-  **Garder** ou **↺ Revenir** à ton texte. Les mots corrigés sont surlignés dans le champ.
-  Une frappe ou l'envoi retire le bilan.
+  **Garder** ou **↺ Revenir** à ton texte. Au terminal, les mots corrigés sont surlignés dans le
+  champ ; l'app de bureau ne dessine pas encore ce surlignage. Une frappe ou l'envoi retire le
+  bilan.
 - Au clavier, une fois la bande sélectionnée (un clic, ou ctrl+x puis Tab) : `a` Améliorer,
   `c` Corriger, `g` Garder, `r` Revenir.
 - **`/lite`** montre les réglages, gardés d'une session à l'autre :
@@ -68,6 +75,7 @@ claude plugin validate . && claude plugin test .
 - `hooks/consignes.ts` : les consignes système des deux boutons
 - `types/index.d.ts` : contrat des valeurs gardées dans `$.state`
 - `tests/` : tests du mod
+- `docs/` : captures d'écran
 
 ## Licence
 

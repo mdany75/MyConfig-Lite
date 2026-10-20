@@ -49,7 +49,12 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
   réglages passent par `/lite`.
 - Le nombre de mots suit le hook `prompt.edit`. Tant qu'aucune frappe n'est remontée (une surface
   qui ne la raise pas, ou les tests), `session.start` lance une relecture du champ toutes les
-  `RELECTURE_MS` ; elle s'arrête à la première frappe remontée.
+  `RELECTURE_MS` ; elle s'arrête à la première frappe remontée. Constaté le 20 octobre 2026 dans
+  l'app de bureau : `prompt.edit` n'y est pas raisé, la relecture fait apparaître la bande 2 à 4 s
+  après la saisie, et les `decorations` de `prompt.fill` n'y sont pas dessinées (pas de surlignage).
+- Captures (`docs/`) : `screencapture -x` en série depuis le shell, pendant que Dany fait l'essai
+  dans la conversation affichée, puis `sips -c` sur la bande et le champ ; l'app Claude n'est pas
+  pilotable par le contrôle de l'ordinateur.
 - Les consignes (`hooks/consignes.ts`) demandent la réponse entre `<texte_final>` et
   `</texte_final>` ; `nettoyer` ne garde que le dernier bloc balisé. Le texte part entre
   `<texte_brut>` et `</texte_brut>` (`enveloppe`) : c'est une donnée, jamais un ordre. Ne pas
@@ -78,4 +83,5 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
 - `hooks/consignes.ts` : consignes système des deux boutons
 - `types/index.d.ts` : contrat des valeurs de `$.state`
 - `tests/` : tests du mod
-- `docs/` : capture d'écran (à venir : `docs/capture.png`, la bande dans l'app de bureau)
+- `docs/` : captures de la bande dans l'app de bureau (`capture.png` : le bilan ; `bande.png` : les
+  boutons)

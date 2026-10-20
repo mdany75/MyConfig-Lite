@@ -1,0 +1,11 @@
+{
+  "name": "myconfig-lite",
+  "version": "1.0.0",
+  "description": "MyConfig Lite : améliore ta demande en prompt clair ou corrige ton texte, d'un clic au-dessus du champ de saisie de Claude Code.",
+  "author": {
+    "name": "Dany Ménard"
+  },
+  "homepage": "https://github.com/mdany75/myconfig-lite",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

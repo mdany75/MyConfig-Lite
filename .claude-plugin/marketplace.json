@@ -1,0 +1,14 @@
+{
+  "name": "myconfig-lite",
+  "owner": {
+    "name": "Dany Ménard"
+  },
+  "description": "MyConfig Lite, le mod de correction de Dany pour Claude Code, installable depuis GitHub.",
+  "plugins": [
+    {
+      "name": "myconfig-lite",
+      "source": "./",
+      "description": "MyConfig Lite : améliore ta demande en prompt clair ou corrige ton texte, d'un clic au-dessus du champ de saisie de Claude Code."
+    }
+  ]
+}

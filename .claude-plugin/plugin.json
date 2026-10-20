@@ -1,6 +1,6 @@
 {
   "name": "myconfig-lite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MyConfig Lite : améliore ta demande en prompt clair ou corrige ton texte, d'un clic au-dessus du champ de saisie de Claude Code.",
   "author": {
     "name": "Dany Ménard"

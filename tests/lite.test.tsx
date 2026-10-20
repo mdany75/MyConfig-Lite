@@ -18,6 +18,7 @@ import {
   nettoyer,
   raisonEchec,
   resume,
+  VERSION,
 } from '../hooks/correction'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -48,6 +49,8 @@ type Simulation = {
   ameliorer?: string
   /** Appelé pendant l'appel au modèle, avant sa réponse (attendre, changer le champ). */
   pendant?: () => Promise<void> | void
+  /** Ce que le champ garde d'un remplissage (un autre mod qui le réécrit) ; par défaut, tout. */
+  remplir?: (texte: string) => string
 }
 
 // Le moteur sous le mod : le champ de saisie, le modèle, les toasts et l'horloge.
@@ -59,7 +62,7 @@ function simuler(on: On, s: Simulation = {}) {
   const toasts: string[] = []
   on('prompt.read', () => ({ value: { text: champ.text, cursor: champ.text.length } }))
   on('prompt.fill', (_$, e) => {
-    champ.text = e.text
+    champ.text = s.remplir ? s.remplir(e.text) : e.text
     champ.decorations = e.decorations
     return { isFilled: true }
   })
@@ -157,9 +160,9 @@ describe('fonctions pures', () => {
     // jai → J'ai, checker → checké, fichié → fichier, la virgule, sa → ça, le point final.
     expect(changements).toBe(6)
     expect(plages.map(p => CORRIGE.slice(p.start, p.end))).toEqual(["J'ai checké", 'fichier,', 'ça', '.'])
-    expect(comparer('un deux trois', 'un 2 3 trois')).toEqual({ changements: 2, plages: [{ start: 3, end: 6 }] })
-    expect(comparer('le le chat', 'le chat')).toEqual({ changements: 1, plages: [] })
-    expect(comparer('pareil', 'pareil')).toEqual({ changements: 0, plages: [] })
+    expect(comparer('un deux trois', 'un 2 3 trois')).toEqual({ changements: 2, plages: [{ start: 3, end: 6 }], mots: ['2 3'] })
+    expect(comparer('le le chat', 'le chat')).toEqual({ changements: 1, plages: [], mots: [] })
+    expect(comparer('pareil', 'pareil')).toEqual({ changements: 0, plages: [], mots: [] })
     expect(comparer('pommes,poires et kiwis', 'pommes, poires et kiwis').changements).toBe(1)
     expect(comparer('le fichié est la', 'le fichier est là').changements).toBe(2)
     expect(comparer('merci 👨‍👩‍👧', 'merci').changements).toBe(1)
@@ -167,9 +170,25 @@ describe('fonctions pures', () => {
     expect(comparer(long, long + 'fin').changements).toBeNull()
   })
 
+  test('les mots corrigés du bilan', () => {
+    expect(comparer(BRUT, CORRIGE).mots).toEqual(["J'ai checké", 'fichier', 'ça'])
+    // Sans doublon, à la majuscule près ; la ponctuation sépare et n'est jamais listée.
+    expect(comparer('sa marche pas pis sa bloque', 'Ça marche pas, pis ça bloque.').mots).toEqual(['Ça'])
+    expect(comparer('le fichié sa marche pas sa bloque', 'le fichier, ça marche pas, ça bloque').mots).toEqual(['fichier', 'ça'])
+    // Plusieurs lignes : aucun saut de ligne dans la liste.
+    const lignes = comparer('regarde le fichié\nsa marche pas depuis hier\npis corrige le', 'Regarde le fichier.\nÇa marche pas depuis hier.\nPis corrige-le.')
+    expect(lignes.mots).toEqual(['Regarde', 'fichier', 'Ça', 'Pis corrige-le'])
+    // Seul l'espacement change : une correction, aucun mot listé.
+    expect(comparer('pommes,poires et kiwis', 'pommes, poires et kiwis')).toMatchObject({ changements: 1, mots: [] })
+    // Accents décomposés : « là » reste « là », et un mot déjà juste n'est pas listé.
+    expect(comparer('il est la', 'il est la\u0300.').mots).toEqual(['là'])
+    expect(comparer('fichie\u0301 ici', 'fichié ici.')).toMatchObject({ changements: 1, mots: [] })
+  })
+
   test('le bilan et la durée', () => {
-    const base = { avant: BRUT, apres: CORRIGE, plages: [], changements: 6, motsAvant: 8, motsApres: 8, ms: 1140, modele: 'haiku' as const }
+    const base = { avant: BRUT, apres: CORRIGE, plages: [], corriges: [], changements: 6, motsAvant: 8, motsApres: 8, ms: 1140, modele: 'haiku' as const }
     expect(bilan({ ...base, travail: 'corriger' })).toBe('6 corrections · 1,1 s')
+    expect(bilan({ ...base, travail: 'corriger', corriges: ["J'ai checké", 'fichier', 'ça'] })).toBe("6 corrections · 1,1 s · J'ai checké, fichier, ça")
     expect(bilan({ ...base, travail: 'corriger', changements: 1 })).toBe('1 correction · 1,1 s')
     expect(bilan({ ...base, travail: 'corriger', changements: 0 })).toBe('Aucune faute · 1,1 s')
     expect(bilan({ ...base, travail: 'corriger', apres: BRUT })).toBe('Aucune faute · 1,1 s')
@@ -250,7 +269,7 @@ describe('la bande', () => {
       expect(consignes).toEqual([CONSIGNE_CORRIGER])
       expect(champ.text).toBe(CORRIGE)
       expect(surligne(champ)).toEqual(["J'ai checké", 'fichier,', 'ça', '.'])
-      expect(await ui.find({ type: 'Text', text: /^6 corrections · / })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^6 corrections · .* s · J'ai checké, fichier, ça$/ })).toBeDefined()
       expect(await ui.find({ type: 'Button', key: 'garder' })).toBeDefined()
       expect(await ui.find({ type: 'Button', key: 'corriger' })).toBeUndefined()
 
@@ -286,7 +305,7 @@ describe('la bande', () => {
       expect(consignes).toEqual([CONSIGNE_AMELIORER])
       expect(champ.text).toBe(AMELIORE)
       expect(champ.decorations).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: /^Prompt amélioré · 8 → 7 mots · / })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^Prompt amélioré · 8 → 7 mots · [\d,]+ s$/ })).toBeDefined()
 
       await ui.press({ key: 'garder' })
       expect(champ.text).toBe(AMELIORE)
@@ -366,6 +385,7 @@ describe('la bande', () => {
     await ui.press({ key: 'corriger' })
     expect(champ.text).toBe(CORRIGE)
     expect(champ.decorations).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /· J'ai checké, fichier, ça$/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -438,6 +458,18 @@ describe('la bande', () => {
     await ui.unmount()
   })
 
+  test('le bilan décrit ce que le champ a pris, pas le texte proposé', async ($, on) => {
+    // Un autre mod réécrit le remplissage : le champ ne garde que le début.
+    const { champ, horloge } = simuler(on, { remplir: t => t.slice(0, 11) })
+    await demarrer($)
+    const ui = await $.ui.mount({ plugin: 'myconfig-lite', surface: 'desktop', ...bande })
+    await taper(champ, horloge, BRUT)
+    await ui.press({ key: 'corriger' })
+    expect(champ.text).toBe("J'ai checké")
+    expect(await ui.find({ type: 'Text', text: /· J'ai checké$/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('une notification de tâche laisse le brouillon et le bilan', async ($, on) => {
     const { champ, horloge } = simuler(on)
     await demarrer($)
@@ -464,7 +496,7 @@ describe('la bande', () => {
 describe('la commande /lite', () => {
   test('sans argument : la version, les réglages et l’aide ; un réglage change et reste', async ($, on) => {
     simuler(on)
-    expect(await lite($, '')).toMatch(/^MyConfig Lite 1\.0\.0\n✎ Améliorer : Sonnet\n✓ Corriger : Opus\n/)
+    expect((await lite($, '')).startsWith(`MyConfig Lite ${VERSION}\n✎ Améliorer : Sonnet\n✓ Corriger : Opus\n`)).toBe(true)
     expect(await lite($, 'corriger sonnet')).toBe('MyConfig Lite : ✓ Corriger utilise Sonnet.')
     expect(await lite($, 'etat')).toContain('✓ Corriger : Sonnet')
   })

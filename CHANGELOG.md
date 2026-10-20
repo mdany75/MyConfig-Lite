@@ -1,5 +1,15 @@
 # Changements
 
+## 1.1.0 — 2026-10-20
+
+- Le bilan de « ✓ Corriger » liste les mots corrigés (« 5 corrections · 1,5 s · J'ai checké,
+  fichier, ça »), une fois chacun, même sur plusieurs lignes. L'app de bureau ne dessine pas le
+  surlignage dans le champ : la liste en tient lieu pour les mots ; la ponctuation et les espaces
+  corrigées sont comptées, pas listées. Sur une bande étroite, c'est la fin de la liste qui est
+  coupée.
+- Le compte et la liste décrivent le texte que le champ a vraiment pris.
+- Les captures d'écran de la bande dans l'app de bureau sont dans le README.
+
 ## 1.0.0 — 2026-10-20
 
 Première version publiée : le module Correction de MyConfig, repris seul et refait de zéro.

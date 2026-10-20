@@ -21,7 +21,8 @@ Les tests demandent Claude Code 2.1.295 ou plus récent.
 ## Publier une version
 
 1. Mettre le numéro à jour dans `.claude-plugin/plugin.json` (`version`) et dans `VERSION`
-   (`hooks/register.tsx`), puis ajouter la section `## X.Y.Z — date` dans `CHANGELOG.md`.
+   (`hooks/correction.ts`, que lisent `/lite` et son test), puis ajouter la section
+   `## X.Y.Z — date` dans `CHANGELOG.md`.
 2. `claude plugin validate . && claude plugin test .`
 3. `git add -A && git commit -m "Version X.Y.Z" && git push origin main`
 4. `git tag -a vX.Y.Z -m "Version X.Y.Z" && git push origin vX.Y.Z`
@@ -67,7 +68,12 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
   pour Sonnet et six pour Haiku). `/lite` les change ; le store garde le choix.
 - `comparer` compte les corrections mot à mot (plus longue sous-suite commune) et donne les
   plages surlignées par `prompt.fill` (`decorations`), pour ✓ Corriger seulement ; au-delà de
-  `COMPARAISON_MAX`, ni compte ni surlignage.
+  `COMPARAISON_MAX`, ni compte ni surlignage. Il rend aussi `mots`, la liste du bilan (1.1.0,
+  demande de Dany : l'app de bureau ne dessine pas le surlignage) : par passage, les mots voisins
+  séparés d'une espace restent ensemble, une ponctuation ou un saut de ligne les sépare, un
+  passage d'espacement seul n'est pas listé, sans doublon à la majuscule près (NFC). La liste
+  vient en dernier dans le bilan, pour que la coupe à la largeur de la bande tombe sur elle, et
+  décrit ce que le champ a pris (`rempli.text`), recomparé quand il diffère du texte proposé.
 - Avant de remplacer le texte, `agir` relit le champ : s'il a changé pendant l'appel, rien n'est
   remplacé.
 - Avant de pousser une fonctionnalité : README et CHANGELOG à jour, capture d'écran
@@ -84,4 +90,5 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
 - `types/index.d.ts` : contrat des valeurs de `$.state`
 - `tests/` : tests du mod
 - `docs/` : captures de la bande dans l'app de bureau (`capture.png` : le bilan ; `bande.png` : les
-  boutons)
+  boutons). `capture.png` date de la 1.0.0 : à refaire au prochain essai de Dany, pour montrer la
+  liste des mots corrigés.

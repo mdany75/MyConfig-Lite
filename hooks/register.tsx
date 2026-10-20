@@ -26,6 +26,7 @@ import {
   raisonRefus,
   resume,
   USAGE,
+  VERSION,
 } from './correction'
 
 type Bande = RenderInput<'AbovePrompt'>
@@ -42,7 +43,6 @@ const reglages = { plugin: 'myconfig-lite', key: 'reglages' } as const
 const CLE_REGLAGES = 'reglages'
 
 const NOM = 'MyConfig Lite'
-const VERSION = '1.0.0'
 
 // Sans hook `prompt.edit` (une surface qui ne remonte pas les frappes), le champ est relu
 // à ce rythme pour savoir s'il a du texte.
@@ -198,11 +198,11 @@ async function agir($: EngineInterface, quoi: Travail): Promise<string | undefin
     const base = { travail: quoi, avant, motsAvant: compterMots(avant), ms, modele }
     // Rien à changer : le champ reste tel quel, curseur compris.
     if (inchange({ avant, apres: propre })) {
-      await $.state.set(resultat, { ...base, apres: avant, plages: [], changements: 0, motsApres: base.motsAvant })
+      await $.state.set(resultat, { ...base, apres: avant, plages: [], corriges: [], changements: 0, motsApres: base.motsAvant })
       return undefined
     }
 
-    const { changements, plages } = comparer(avant, propre)
+    const { changements, plages, mots: liste } = comparer(avant, propre)
     const surligne = quoi === 'corriger' && r.surlignage ? plages : []
     const rempli = await $.prompt.fill({
       text: propre,
@@ -214,11 +214,15 @@ async function agir($: EngineInterface, quoi: Travail): Promise<string | undefin
     }
     // Le bilan suit ce que le champ a vraiment pris (il retire les caractères invisibles).
     const apres = typeof rempli.text === 'string' && rempli.text !== '' ? rempli.text : propre
+    // Le compte et la liste décrivent aussi ce que le champ a pris, quand il diffère du texte
+    // proposé (caractères invisibles retirés, un autre mod qui réécrit le remplissage).
+    const final = apres === propre ? { changements, mots: liste } : comparer(avant, apres)
     const fait: Resultat = {
       ...base,
       apres,
       plages: apres === propre ? surligne : [],
-      changements,
+      corriges: quoi === 'corriger' ? final.mots : [],
+      changements: final.changements,
       motsApres: compterMots(apres),
     }
     await $.state.set(mots, motsDuChamp(apres))

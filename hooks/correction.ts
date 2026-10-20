@@ -112,19 +112,20 @@ export function jetons(texte: string): Jeton[] {
 /** Au-delà, la comparaison coûterait trop cher : pas de compte ni de surlignage. */
 export const COMPARAISON_MAX = 4_000_000
 
-// Compare mot à mot (plus longue sous-suite commune). Un passage changé est une suite de jetons
-// retirés, ajoutés ou remplacés entre deux jetons gardés ; il compte pour autant de corrections
-// que le plus grand de ses deux côtés (« jai checker » → « J'ai checké » : 2), et pour une seule
-// quand seul l'espacement change (« pommes,poires » → « pommes, poires »). Les plages sont les
-// jetons ajoutés, dans le texte d'après.
-export function comparer(avant: string, apres: string): { changements: number | null; plages: Plage[] } {
+// Compare mot à mot (plus longue sous-suite commune ; accents décomposés ou non, c'est pareil).
+// Un passage changé est une suite de jetons retirés, ajoutés ou remplacés entre deux jetons
+// gardés ; il compte pour autant de corrections que le plus grand de ses deux côtés (« jai
+// checker » → « J'ai checké » : 2), et pour une seule quand seul l'espacement change
+// (« pommes,poires » → « pommes, poires »). Les plages sont les jetons ajoutés, dans le texte
+// d'après ; les mots, ceux du bilan (voir motsDuPassage).
+export function comparer(avant: string, apres: string): { changements: number | null; plages: Plage[]; mots: string[] } {
   const b = jetons(apres)
-  const x = jetons(avant).map(j => j.texte)
-  const y = b.map(j => j.texte)
+  const x = jetons(avant).map(j => j.texte.normalize('NFC'))
+  const y = b.map(j => j.texte.normalize('NFC'))
   const n = x.length
   const m = y.length
   if ((n + 1) * (m + 1) > COMPARAISON_MAX) {
-    return { changements: null, plages: [] }
+    return { changements: null, plages: [], mots: [] }
   }
 
   // t[i, j] : la longueur de la plus longue sous-suite commune de x[i…] et y[j…].
@@ -140,6 +141,8 @@ export function comparer(avant: string, apres: string): { changements: number | 
 
   let changements = 0
   const plages: Plage[] = []
+  // Les mots du bilan, sans doublon à la majuscule près ; la première graphie l'emporte.
+  const mots = new Map<string, string>()
   let i = 0
   let j = 0
   while (i < n || j < m) {
@@ -164,12 +167,51 @@ export function comparer(avant: string, apres: string): { changements: number | 
     const fin = b[j - 1]
     if (j > premier && debut !== undefined && fin !== undefined) {
       plages.push({ start: debut.debut, end: fin.fin })
+      if (!espacement) {
+        for (const mot of motsDuPassage(apres, b.slice(premier, j))) {
+          const cle = mot.toLocaleLowerCase('fr')
+          if (!mots.has(cle)) {
+            mots.set(cle, mot)
+          }
+        }
+      }
     }
   }
-  return { changements, plages }
+  return { changements, plages, mots: [...mots.values()] }
+}
+
+// Les mots d'un passage ajouté, pour le bilan : des mots voisins séparés par une simple espace
+// restent ensemble (« J'ai checké ») ; une ponctuation (« , », « . ») ou un saut de ligne les
+// sépare, et n'apparaît jamais dans la liste.
+function motsDuPassage(apres: string, passage: Jeton[]): string[] {
+  const mots: string[] = []
+  let groupe: Jeton[] = []
+  const fermer = () => {
+    const a = groupe[0]
+    const z = groupe[groupe.length - 1]
+    if (a !== undefined && z !== undefined) {
+      mots.push(apres.slice(a.debut, z.fin).replace(/[ \t\u00a0\u202f]+/g, ' ').normalize('NFC'))
+    }
+    groupe = []
+  }
+  for (const jeton of passage) {
+    const precedent = groupe[groupe.length - 1]
+    const ecart = precedent === undefined ? '' : apres.slice(precedent.fin, jeton.debut)
+    if (!/[\p{L}\p{N}]/u.test(jeton.texte) || !/^[ \t\u00a0\u202f]*$/.test(ecart)) {
+      fermer()
+    }
+    if (/[\p{L}\p{N}]/u.test(jeton.texte)) {
+      groupe.push(jeton)
+    }
+  }
+  fermer()
+  return mots
 }
 
 // ── Bilan et libellés de la bande ────────────────────────────────────────────
+
+// La version du mod, aussi dans .claude-plugin/plugin.json ; « /lite » l'affiche.
+export const VERSION = '1.1.0'
 
 export const NOMS: Record<Modele, string> = { haiku: 'Haiku', sonnet: 'Sonnet', opus: 'Opus' }
 
@@ -204,7 +246,11 @@ export function bilan(r: Resultat) {
   if (r.changements === null) {
     return `Texte corrigé · ${temps}`
   }
-  return `${r.changements === 1 ? '1 correction' : `${r.changements} corrections`} · ${temps}`
+  // Les mots corrigés viennent en dernier : sur une bande étroite, c'est leur liste qui est coupée.
+  const compte = `${r.changements === 1 ? '1 correction' : `${r.changements} corrections`} · ${temps}`
+  // Un bilan gardé dans $.state par la 1.0.0, d'avant un rechargement, n'a pas de liste.
+  const mots = r.corriges ?? []
+  return mots.length > 0 ? `${compte} · ${mots.join(', ')}` : compte
 }
 
 // ── Réglages ─────────────────────────────────────────────────────────────────

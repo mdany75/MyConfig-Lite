@@ -28,6 +28,8 @@ export type Resultat = {
   apres: string
   /** Les mots corrigés surlignés dans le champ ; vide sans surlignage. */
   plages: Plage[]
+  /** Les mots corrigés, dans l'ordre du texte, pour le bilan de « ✓ Corriger » ; vide pour Améliorer. */
+  corriges: string[]
   /** Le nombre de passages changés ; rien quand le texte est trop long pour être comparé. */
   changements: number | null
   motsAvant: number

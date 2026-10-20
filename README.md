@@ -34,18 +34,18 @@ Opus n'a laissé aucune faute grave, Sonnet une ou deux, Haiku six. Pour une cor
 Dans une session Claude Code au terminal :
 
 ```
-/plugin install myconfig-lite --marketplace mdany75/myconfig-lite
+/plugin install myconfig-lite --marketplace mdany75/MyConfig-Lite
 ```
 
 Réponds `y` pour ajouter le marketplace, puis choisis la portée (Entrée : pour toi, dans tous tes
 projets). Depuis un shell :
 
 ```bash
-claude plugin install myconfig-lite --marketplace mdany75/myconfig-lite
+claude plugin install myconfig-lite --marketplace mdany75/MyConfig-Lite
 ```
 
 Dans l'app de bureau, où `/plugin` ne s'ouvre pas : + à côté du champ de saisie, puis Plugins,
-« Add marketplace » avec `mdany75/myconfig-lite`, puis « Add plugin ». Le mod installé au
+« Add marketplace » avec `mdany75/MyConfig-Lite`, puis « Add plugin ». Le mod installé au
 terminal se charge aussi dans l'app de bureau.
 
 Configuration requise : Claude Code 2.1.295 ou plus récent. Les appels au modèle passent par ta

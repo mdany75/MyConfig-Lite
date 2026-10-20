@@ -5,7 +5,7 @@
   "author": {
     "name": "Dany Ménard"
   },
-  "homepage": "https://github.com/mdany75/myconfig-lite",
+  "homepage": "https://github.com/mdany75/MyConfig-Lite",
   "license": "MIT",
   "types": "./types/index.d.ts"
 }

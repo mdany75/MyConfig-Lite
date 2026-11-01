@@ -53,6 +53,8 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
   `RELECTURE_MS` ; elle s'arrête à la première frappe remontée. Constaté le 20 octobre 2026 dans
   l'app de bureau : `prompt.edit` n'y est pas raisé, la relecture fait apparaître la bande 2 à 4 s
   après la saisie, et les `decorations` de `prompt.fill` n'y sont pas dessinées (pas de surlignage).
+  Un changement sans frappe (Échap, historique, annulation, dictée) passe par `prompt.change`,
+  que le mod suit aussi, sauf ses propres remplissages (`origin.name` `myconfig-lite`).
 - Captures (`docs/`) : `screencapture -x` en série depuis le shell, pendant que Dany fait l'essai
   dans la conversation affichée, puis `sips -c` sur la bande et le champ ; l'app Claude n'est pas
   pilotable par le contrôle de l'ordinateur.
@@ -71,7 +73,14 @@ Release sans pièce jointe : le mod s'installe depuis le marketplace du dépôt.
   `COMPARAISON_MAX`, ni compte ni surlignage. Il rend aussi `mots`, la liste du bilan (1.1.0,
   demande de Dany : l'app de bureau ne dessine pas le surlignage) : par passage, les mots voisins
   séparés d'une espace restent ensemble, une ponctuation ou un saut de ligne les sépare, un
-  passage d'espacement seul n'est pas listé, sans doublon à la majuscule près (NFC). La liste
+  passage d'espacement seul n'est pas listé, sans doublon à la majuscule près (NFC). Les jetons
+  ne gardent pas les espaces : entre deux jetons gardés, un espacement changé (« Note: » →
+  « Note : », deux lignes fusionnées) compte pour une correction, surlignée, non listée. Un passage
+  aux mêmes lettres compte pour une : non listé si seul l'espacement change, listé si des mots
+  sont soudés ou coupés (« en fin » → « enfin »). Dans un autre passage, les morceaux (suite de lettres,
+  ou signe) sont alignés, jusqu'à `SOUDURE_MAX` soudés en un : seuls les jetons dont un morceau a
+  changé, ou qu'une soudure ou une coupure touche (« quand-même » → « quand même »), sont listés,
+  et une soudure ou une coupure compte pour une. La liste
   vient en dernier dans le bilan, pour que la coupe à la largeur de la bande tombe sur elle, et
   décrit ce que le champ a pris (`rempli.text`), recomparé quand il diffère du texte proposé.
 - Avant de remplacer le texte, `agir` relit le champ : s'il a changé pendant l'appel, rien n'est

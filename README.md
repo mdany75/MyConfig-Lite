@@ -22,10 +22,11 @@ plus discrète.
   reconnus par la dictée) et garde tes mots, ton ton et tes québécismes.
 - **Pendant le travail** : « Reformulation… · Sonnet » ou « Correction… · Opus », et **Annuler**.
 - **Après** : un bilan, puis **Garder** ou **↺ Revenir** à ton texte. Pour ✓ Corriger, il liste les
-  mots corrigés (« 5 corrections · 1,5 s · J'ai checké, fichier, ça ») ; pour ✎ Améliorer, il compte
-  les mots (« Prompt amélioré · 19 → 18 mots · 1,8 s »). Au terminal, les mots corrigés sont aussi
-  surlignés dans le champ ; l'app de bureau ne dessine pas encore ce surlignage. Une frappe ou
-  l'envoi retire le bilan.
+  mots corrigés (« 5 corrections · 1,5 s · J'ai checké, fichier, ça ») ; les espaces corrigées
+  (« Note: » → « Note : ») sont comptées sans être listées. Pour ✎ Améliorer, il compte les mots
+  (« Prompt amélioré · 19 → 18 mots · 1,8 s »). Au terminal, les mots corrigés sont aussi
+  surlignés dans le champ ; l'app de bureau ne dessine pas encore ce surlignage. Un changement du
+  texte (frappe, Échap, historique, annulation) ou l'envoi retire le bilan.
 - Au clavier, une fois la bande sélectionnée (un clic, ou ctrl+x puis Tab) : `a` Améliorer,
   `c` Corriger, `g` Garder, `r` Revenir.
 - **`/lite`** montre les réglages, gardés d'une session à l'autre :

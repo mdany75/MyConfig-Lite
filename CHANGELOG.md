@@ -1,5 +1,16 @@
 # Changements
 
+## 1.1.1 — 2026-11-01
+
+- Une correction d'espaces seule (« Note: » → « Note : », deux lignes fusionnées) est comptée et
+  surlignée : le bilan ne dit plus « Aucune faute » alors que le texte a changé.
+- Deux mots soudés ou coupés (« en fin » → « enfin », « quand-même » → « quand même ») sont
+  listés dans le bilan, et comptent pour une correction même à côté d'une autre faute.
+- Un passage qui mêle espace et vraie correction ne compte plus que les mots changés
+  (« pommes,poires » → « Pommes, poires » : 1 correction, « Pommes »).
+- La bande suit le champ quand il change sans frappe : vidé par Échap, prompt rappelé de
+  l'historique, annulation, dictée.
+
 ## 1.1.0 — 2026-10-20
 
 - Le bilan de « ✓ Corriger » liste les mots corrigés (« 5 corrections · 1,5 s · J'ai checké,

@@ -390,6 +390,17 @@ export const register: Register = on => {
     return r
   }).catch(($, e, next) => next(e))
 
+  // Un changement du champ sans frappe (vidé par Échap, rappel de l'historique, annulation,
+  // dictée) : la bande suit, même quand la relecture est arrêtée. Les remplissages du mod
+  // lui-même sont suivis par ses actions.
+  on('prompt.change', async ($, e, next) => {
+    const r = await next(e)
+    if (e.origin.kind !== 'plugin' || e.origin.name !== 'myconfig-lite') {
+      await suivreChamp($, e.text)
+    }
+    return r
+  }).catch(($, e, next) => next(e))
+
   // Un autre mod remplit le champ : la bande suit (le mod ne voit pas ses propres remplissages).
   on('prompt.fill', async ($, e, next) => {
     const r = await next(e)

@@ -76,6 +76,7 @@ function simuler(on: On, s: Simulation = {}) {
         : (s.ameliorer ?? `<texte_final>${AMELIORE}</texte_final>`)
     return { value: { isAnswered: true as const, text: texte, usage: USAGE } }
   })
+  on('prompt.change', (_$, e) => ({ text: e.text }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('prompt.submit', (_$, e) => {
     if (e.origin.kind === 'composer') {
@@ -183,6 +184,35 @@ describe('fonctions pures', () => {
     // Accents décomposés : « là » reste « là », et un mot déjà juste n'est pas listé.
     expect(comparer('il est la', 'il est la\u0300.').mots).toEqual(['là'])
     expect(comparer('fichie\u0301 ici', 'fichié ici.')).toMatchObject({ changements: 1, mots: [] })
+  })
+
+  test('l’espacement entre deux mots gardés compte, sans entrer dans la liste', () => {
+    // Les espaces à la québécoise : trois corrections surlignées, pas « Aucune faute ».
+    const note = 'Note : 100 % prêt?'
+    const r = comparer('Note: 100% prêt ?', note)
+    expect(r).toMatchObject({ changements: 3, mots: [] })
+    expect(r.plages.map(p => note.slice(p.start, p.end))).toEqual(['Note :', '100 %', 'prêt?'])
+    // Deux lignes fusionnées, une espace insécable ajoutée.
+    expect(comparer('ligne un\nligne deux', 'ligne un ligne deux')).toMatchObject({ changements: 1, mots: [] })
+    expect(comparer('a: b', 'a\u00a0: b').changements).toBe(1)
+    // L'espace en fin de ligne ne compte pas : seul le nombre de sauts de ligne compte.
+    expect(comparer('a \nb', 'a\nb').changements).toBe(0)
+  })
+
+  test('mots soudés ou coupés, et passages mêlant espacement et correction', () => {
+    expect(comparer('en fin de compte', 'enfin de compte')).toMatchObject({ changements: 1, mots: ['enfin'] })
+    expect(comparer('Java Script', 'JavaScript')).toMatchObject({ changements: 1, mots: ['JavaScript'] })
+    expect(comparer('enfin', 'en fin')).toMatchObject({ changements: 1, mots: ['en fin'] })
+    // Une majuscule et une espace : une correction, et « poires », inchangé, n'est pas listé.
+    expect(comparer('pommes,poires', 'Pommes, poires')).toMatchObject({ changements: 1, mots: ['Pommes'] })
+    expect(comparer('pomes,poires', 'pommes, Poires')).toMatchObject({ changements: 2, mots: ['pommes', 'Poires'] })
+    // Un trait d'union retiré ou ajouté : le mot coupé ou soudé est listé.
+    expect(comparer('il est quand-même venu', 'il est quand même venu')).toMatchObject({ changements: 1, mots: ['quand même'] })
+    expect(comparer('il est quand même venu', 'il est quand-même venu')).toMatchObject({ changements: 1, mots: ['quand-même'] })
+    expect(comparer("c'est tout-à-fait correct", "C'est tout à fait correct.")).toMatchObject({ changements: 3, mots: ["C'est tout à fait"] })
+    // Une soudure ou une coupure à côté d'une autre faute compte pour une.
+    expect(comparer('en fin sa marche', 'enfin ça marche')).toMatchObject({ changements: 2, mots: ['enfin ça'] })
+    expect(comparer('a 14h30 demain', 'à 14 h 30 demain')).toMatchObject({ changements: 2, mots: ['à 14 h 30'] })
   })
 
   test('le bilan et la durée', () => {
@@ -489,6 +519,56 @@ describe('la bande', () => {
     expect(await ui.find({ key: 'myconfig-lite' })).toBeUndefined()
     await $.prompt.fill({ text: 'bonjour à tous', mode: 'replace', origin: { kind: 'plugin', name: 'autre' } })
     expect(await ui.find({ type: 'Text', text: '3 mots' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('un changement sans frappe (Échap, historique, annulation) : la bande suit, relecture arrêtée', async ($, on) => {
+    const { champ, horloge } = simuler(on)
+    on('prompt.edit', (_$, e) => {
+      champ.text = e.text.slice(0, e.start) + e.inputText + e.text.slice(e.end)
+      return { text: champ.text, cursor: e.start + e.inputText.length }
+    })
+    await demarrer($, 'terminal')
+    const ui = await $.ui.mount({ plugin: 'myconfig-lite', surface: 'terminal', ...bande })
+    // Une frappe remontée arrête la relecture : seul prompt.change peut encore faire suivre la bande.
+    await $.prompt.edit({ origin: { kind: 'composer' }, text: '', cursor: 0, start: 0, end: 0, inputText: BRUT })
+    expect(await ui.find({ type: 'Text', text: '8 mots' })).toBeDefined()
+
+    // Échap vide le champ.
+    champ.text = ''
+    await $.prompt.change({ text: '', cursor: 0, origin: { kind: 'clear' } })
+    await horloge.advance(1_100)
+    expect(await ui.find({ key: 'myconfig-lite' })).toBeUndefined()
+
+    // La flèche du haut rappelle un prompt.
+    champ.text = 'un ancien prompt'
+    await $.prompt.change({ text: champ.text, cursor: champ.text.length, origin: { kind: 'history' } })
+    expect(await ui.find({ type: 'Text', text: '3 mots' })).toBeDefined()
+
+    // Après ✓ Corriger, une annulation rend le texte d'avant : le bilan disparaît.
+    champ.text = BRUT
+    await $.prompt.change({ text: BRUT, cursor: BRUT.length, origin: { kind: 'engine' } })
+    await ui.press({ key: 'corriger' })
+    expect(await ui.find({ type: 'Button', key: 'revenir' })).toBeDefined()
+    champ.text = BRUT
+    await $.prompt.change({ text: BRUT, cursor: BRUT.length, origin: { kind: 'undo' } })
+    expect(await ui.find({ type: 'Button', key: 'revenir' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: '8 mots' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('les remplissages du mod lui-même ne retirent pas son bilan', async ($, on) => {
+    const { champ, horloge } = simuler(on)
+    await demarrer($)
+    const ui = await $.ui.mount({ plugin: 'myconfig-lite', surface: 'desktop', ...bande })
+    await taper(champ, horloge, BRUT)
+    await ui.press({ key: 'corriger' })
+    // Le texte que porte l'événement diffère du bilan (un texte trop long replié par le moteur) :
+    // seule l'origin, celle du mod, le fait ignorer ; un autre mod, lui, retire le bilan.
+    await $.prompt.change({ text: 'replié', cursor: 6, origin: { kind: 'plugin', name: 'myconfig-lite' } })
+    expect(await ui.find({ type: 'Button', key: 'revenir' })).toBeDefined()
+    await $.prompt.change({ text: 'replié', cursor: 6, origin: { kind: 'plugin', name: 'autre' } })
+    expect(await ui.find({ type: 'Button', key: 'revenir' })).toBeUndefined()
     await ui.unmount()
   })
 })

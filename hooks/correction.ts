@@ -112,23 +112,10 @@ export function jetons(texte: string): Jeton[] {
 /** Au-delà, la comparaison coûterait trop cher : pas de compte ni de surlignage. */
 export const COMPARAISON_MAX = 4_000_000
 
-// Compare mot à mot (plus longue sous-suite commune ; accents décomposés ou non, c'est pareil).
-// Un passage changé est une suite de jetons retirés, ajoutés ou remplacés entre deux jetons
-// gardés ; il compte pour autant de corrections que le plus grand de ses deux côtés (« jai
-// checker » → « J'ai checké » : 2), et pour une seule quand seul l'espacement change
-// (« pommes,poires » → « pommes, poires »). Les plages sont les jetons ajoutés, dans le texte
-// d'après ; les mots, ceux du bilan (voir motsDuPassage).
-export function comparer(avant: string, apres: string): { changements: number | null; plages: Plage[]; mots: string[] } {
-  const b = jetons(apres)
-  const x = jetons(avant).map(j => j.texte.normalize('NFC'))
-  const y = b.map(j => j.texte.normalize('NFC'))
+// t[i, j] : la longueur de la plus longue sous-suite commune de x[i…] et y[j…].
+function tableLcs(x: string[], y: string[]) {
   const n = x.length
   const m = y.length
-  if ((n + 1) * (m + 1) > COMPARAISON_MAX) {
-    return { changements: null, plages: [], mots: [] }
-  }
-
-  // t[i, j] : la longueur de la plus longue sous-suite commune de x[i…] et y[j…].
   const largeur = m + 1
   const t = new Uint32Array((n + 1) * largeur)
   const lcs = (i: number, j: number) => t[i * largeur + j] ?? 0
@@ -138,19 +125,207 @@ export function comparer(avant: string, apres: string): { changements: number | 
       t[i * largeur + j] = egaux(i, j) ? lcs(i + 1, j + 1) + 1 : Math.max(lcs(i + 1, j), lcs(i, j + 1))
     }
   }
+  return { lcs, egaux }
+}
+
+// Les morceaux d'un jeton : ses suites de lettres et de chiffres, et chaque signe à part
+// (« pommes,poires » : pommes , poires).
+const morceaux = (texte: string) => texte.match(/[\p{L}\p{M}\p{N}_]+|[^\p{L}\p{M}\p{N}_]/gu) ?? []
+
+// Au plus tant de morceaux soudés en un seul (« en fin » → « enfin », « 14 h 30 » → « 14h30 »).
+const SOUDURE_MAX = 3
+
+const lettres = (morceau: string) => /[\p{L}\p{N}]/u.test(morceau)
+
+// Dans un passage changé, ce que chaque côté a de jetons changés : un jeton dont un morceau
+// a changé, ou qu'une soudure ou une coupure touche (« pommes,poires » → « Pommes, poires » ne
+// change que « Pommes » ; « quand-même » → « quand même » change les deux mots). Une soudure ou
+// une coupure compte pour une correction : `retires` et `nets` (les jetons ajoutés) en tiennent
+// compte, `ajoutes` marque chaque jeton ajouté changé, pour la liste du bilan.
+function jetonsChanges(x: string[], y: string[]): { retires: number; nets: number; ajoutes: boolean[] } {
+  const mx = x.map(morceaux)
+  const my = y.map(morceaux)
+  const fx = mx.flat()
+  const fy = my.flat()
+  // Un passage trop long pour être détaillé : tous ses jetons comptent.
+  if ((fx.length + 1) * (fy.length + 1) > COMPARAISON_MAX) {
+    return { retires: x.length, nets: y.length, ajoutes: y.map(() => true) }
+  }
+  // Le jeton de chaque morceau.
+  const jx = mx.flatMap((ms, k) => ms.map(() => k))
+  const jy = my.flatMap((ms, k) => ms.map(() => k))
+  const n = fx.length
+  const m = fy.length
+
+  // Les groupes possibles en (i, j) : un morceau égal à un morceau, ou plusieurs morceaux
+  // d'un côté soudés en un seul de l'autre ; [nombre à gauche, nombre à droite].
+  const groupes = (i: number, j: number): [number, number][] => {
+    const g: [number, number][] = []
+    if (fx[i] === fy[j]) {
+      g.push([1, 1])
+    }
+    for (let p = 2; p <= SOUDURE_MAX; p++) {
+      if (i + p <= n && fx.slice(i, i + p).join('') === fy[j]) {
+        g.push([p, 1])
+      }
+      if (j + p <= m && fy.slice(j, j + p).join('') === fx[i]) {
+        g.push([1, p])
+      }
+    }
+    return g
+  }
+  // t[i, j] : le plus grand nombre de groupes gardés entre fx[i…] et fy[j…].
+  const largeur = m + 1
+  const t = new Uint32Array((n + 1) * largeur)
+  const at = (i: number, j: number) => t[i * largeur + j] ?? 0
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      let mieux = Math.max(at(i + 1, j), at(i, j + 1))
+      for (const [p, q] of groupes(i, j)) {
+        mieux = Math.max(mieux, at(i + p, j + q) + 1)
+      }
+      t[i * largeur + j] = mieux
+    }
+  }
+
+  const touchesX = new Array<boolean>(x.length).fill(false)
+  const touchesY = new Array<boolean>(y.length).fill(false)
+  // Le jeton d'après où va chaque morceau gardé d'avant ; -1 : retiré.
+  const vers = new Array<number>(n).fill(-1)
+  const gardeY = new Array<boolean>(m).fill(false)
+  let soudes = 0
+  let coupes = 0
+  const distincts = (ks: number[]) => new Set(ks).size
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    const groupe = groupes(i, j).find(([p, q]) => at(i + p, j + q) + 1 === at(i, j))
+    if (groupe !== undefined) {
+      const [p, q] = groupe
+      const gx = jx.slice(i, i + p)
+      const gy = jy.slice(j, j + q)
+      for (let k = i; k < i + p; k++) {
+        vers[k] = jy[j] ?? -1
+      }
+      gy.forEach((_, k) => (gardeY[j + k] = true))
+      if (p > 1 || q > 1) {
+        gx.forEach(k => (touchesX[k] = true))
+        gy.forEach(k => (touchesY[k] = true))
+        soudes += distincts(gx) - 1
+        coupes += distincts(gy) - 1
+      }
+      i += p
+      j += q
+    } else if (at(i, j + 1) === at(i, j)) {
+      j++
+    } else {
+      i++
+    }
+  }
+  fx.forEach((_, k) => {
+    if (vers[k] === -1) {
+      touchesX[jx[k] ?? 0] = true
+    }
+  })
+  fy.forEach((_, k) => {
+    if (!gardeY[k]) {
+      touchesY[jy[k] ?? 0] = true
+    }
+  })
+  // Un jeton d'avant coupé là où un signe a disparu (« quand-même » → « quand même ») : les
+  // jetons d'après qui en viennent sont changés, et la coupure compte pour une.
+  let debut = 0
+  mx.forEach(ms => {
+    let precedent = -1
+    let retire = false
+    ms.forEach((morceau, k) => {
+      const cible = vers[debut + k] ?? -1
+      if (cible === -1) {
+        retire = true
+      } else if (lettres(morceau)) {
+        if (precedent !== -1 && cible !== precedent && retire) {
+          for (let c = precedent; c <= cible; c++) {
+            touchesY[c] = true
+          }
+          coupes += cible - precedent
+        }
+        precedent = cible
+        retire = false
+      }
+    })
+    debut += ms.length
+  })
+  return {
+    retires: touchesX.filter(Boolean).length - soudes,
+    nets: touchesY.filter(Boolean).length - coupes,
+    ajoutes: touchesY,
+  }
+}
+
+// L'espace entre deux jetons, pour savoir s'il a changé : les sauts de ligne comptent par leur
+// nombre (deux lignes fusionnées, un paragraphe de plus), le reste tel quel (« Note: » →
+// « Note : », une espace insécable ajoutée).
+function ecart(texte: string, debut: number, fin: number) {
+  const s = texte.slice(debut, fin)
+  const lignes = s.split('\n').length - 1
+  return lignes > 0 ? '\n'.repeat(lignes) : s
+}
+
+// Compare mot à mot (plus longue sous-suite commune ; accents décomposés ou non, c'est pareil).
+// Un passage changé est une suite de jetons retirés, ajoutés ou remplacés entre deux jetons
+// gardés ; il compte pour autant de corrections que le plus grand de ses deux côtés, en ne
+// comptant que les jetons dont un morceau a changé (« jai checker » → « J'ai checké » : 2 ;
+// « pommes,poires » → « Pommes, poires » : 1), et pour une seule quand les lettres restent les
+// mêmes (« pommes,poires » → « pommes, poires », « en fin » → « enfin »). Entre deux jetons
+// gardés, un espacement changé (« Note: » → « Note : », deux lignes fusionnées) compte aussi
+// pour une. Les plages sont les jetons ajoutés, dans le texte d'après ; les mots, ceux du bilan
+// (voir motsDuPassage) : un changement d'espacement seul n'y est pas, un mot soudé ou coupé y est.
+export function comparer(avant: string, apres: string): { changements: number | null; plages: Plage[]; mots: string[] } {
+  const a = jetons(avant)
+  const b = jetons(apres)
+  const x = a.map(j => j.texte.normalize('NFC'))
+  const y = b.map(j => j.texte.normalize('NFC'))
+  const n = x.length
+  const m = y.length
+  if ((n + 1) * (m + 1) > COMPARAISON_MAX) {
+    return { changements: null, plages: [], mots: [] }
+  }
+  const { lcs, egaux } = tableLcs(x, y)
 
   let changements = 0
   const plages: Plage[] = []
+  // Deux plages qui se touchent n'en font qu'une (« 100 % » puis « % prêt »).
+  const surligner = (start: number, end: number) => {
+    const derniere = plages[plages.length - 1]
+    if (derniere !== undefined && start <= derniere.end) {
+      derniere.end = Math.max(derniere.end, end)
+    } else {
+      plages.push({ start, end })
+    }
+  }
   // Les mots du bilan, sans doublon à la majuscule près ; la première graphie l'emporte.
   const mots = new Map<string, string>()
   let i = 0
   let j = 0
+  // Vrai quand le pas précédent gardait un jeton des deux côtés : l'espace entre les deux est
+  // alors à comparer.
+  let garde = false
   while (i < n || j < m) {
     if (egaux(i, j)) {
+      const pa = a[i - 1]
+      const pb = b[j - 1]
+      const ja = a[i]
+      const jb = b[j]
+      if (garde && pa && pb && ja && jb && ecart(avant, pa.fin, ja.debut) !== ecart(apres, pb.fin, jb.debut)) {
+        changements++
+        surligner(pb.debut, jb.fin)
+      }
+      garde = true
       i++
       j++
       continue
     }
+    garde = false
     // Un passage changé : on avance jusqu'au prochain jeton gardé des deux côtés.
     const premier = j
     const retire = i
@@ -161,14 +336,22 @@ export function comparer(avant: string, apres: string): { changements: number | 
         i++
       }
     }
-    const espacement = x.slice(retire, i).join('') === y.slice(premier, j).join('')
-    changements += espacement ? 1 : Math.max(i - retire, j - premier)
+    const gauche = x.slice(retire, i)
+    const droite = y.slice(premier, j)
+    // Les mêmes lettres dans le même ordre : seul l'espacement change, ou deux mots sont
+    // soudés (« en fin » → « enfin ») ou coupés ; c'est une correction.
+    const memesLettres = gauche.join('') === droite.join('')
+    const espacement = memesLettres && gauche.flatMap(morceaux).join('\u0000') === droite.flatMap(morceaux).join('\u0000')
+    const changes = memesLettres ? null : jetonsChanges(gauche, droite)
+    changements += changes === null ? 1 : Math.max(1, changes.retires, changes.nets)
     const debut = b[premier]
     const fin = b[j - 1]
     if (j > premier && debut !== undefined && fin !== undefined) {
-      plages.push({ start: debut.debut, end: fin.fin })
+      surligner(debut.debut, fin.fin)
       if (!espacement) {
-        for (const mot of motsDuPassage(apres, b.slice(premier, j))) {
+        // Un jeton dont aucun morceau n'a changé (« poires » dans « Pommes, poires ») n'est pas listé.
+        const listes = b.slice(premier, j).filter((_, k) => changes === null || changes.ajoutes[k])
+        for (const mot of motsDuPassage(apres, listes)) {
           const cle = mot.toLocaleLowerCase('fr')
           if (!mots.has(cle)) {
             mots.set(cle, mot)
@@ -211,7 +394,7 @@ function motsDuPassage(apres: string, passage: Jeton[]): string[] {
 // ── Bilan et libellés de la bande ────────────────────────────────────────────
 
 // La version du mod, aussi dans .claude-plugin/plugin.json ; « /lite » l'affiche.
-export const VERSION = '1.1.0'
+export const VERSION = '1.1.1'
 
 export const NOMS: Record<Modele, string> = { haiku: 'Haiku', sonnet: 'Sonnet', opus: 'Opus' }
 
